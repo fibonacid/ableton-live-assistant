@@ -1,5 +1,31 @@
 import { config } from "dotenv";
 import OpenAI from "openai";
+import OSC from "osc-js";
+
+const osc = new OSC({ plugin: new OSC.DatagramPlugin() });
+
+// Listen for OSC messages on the specified port and host
+osc.open({ 
+    port: 11001, // the port used by AbletonOSC
+    host: "0.0.0.0" // accept messages from any host
+});
+
+// Send an OSC message to the specified address
+function sendMessage(address, ...args) {
+    osc.send(new OSC.Message(address, ...args), {
+        port: 11000, // the port used by AbletonOSC
+        host: "127.0.0.1" // the host where AbletonOSC is running
+    });
+}
+
+// Wait for an OSC message on the specified address
+function waitForMessage(address) {
+    return new Promise((resolve) => {
+        osc.on(address, (message) => {
+            resolve(message);
+        });
+    });
+}
 
 // Load environment variables
 config();
@@ -56,3 +82,4 @@ async function main() {
 }
 
 main();
+

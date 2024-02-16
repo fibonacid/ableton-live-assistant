@@ -1,6 +1,6 @@
 ## How to control Ableton Live with GPT-4 🎼
 
-In this blog post i'll show you how to create an agent that receives instructions in natural language and performs actions on your Ableton Live instance. To keep it simple i'll  just show you how to get and set the song tempo, but the same concepts can be applied to obtain more complex behaviours.
+In this blog post i'll show you how to create an agent that receives instructions in natural language and performs actions on your Ableton Live instance. To keep it simple i'll just show you how to get and set the song tempo, but the same concepts can be applied to obtain more complex behaviours.
 
 ## Requirements
 
@@ -184,4 +184,49 @@ Run the code and you should see the response printed in the terminal.
 
 ```
 The current time is 11:20:02 AM.
+```
+
+### Controlling Ableton Live 
+
+Now it's time to put everything together and create an agent that can control Ableton Live.
+
+We are going to create a tool that can set and get the song tempo.
+First, let's create some helpers to send and receive OSC messages.
+
+```javascript
+// other imports...
+import OSC from "osc-js";
+
+const osc = new OSC({ plugin: new OSC.DatagramPlugin() });
+
+// Listen for OSC messages on the specified port and host
+osc.open({ 
+    port: 11001, // the port used by AbletonOSC
+    host: "0.0.0.0" // accept messages from any host
+});
+
+// Send an OSC message to the specified address
+function sendMessage(address, ...args) {
+    osc.send(new OSC.Message(address, ...args), {
+        port: 11000, // the port used by AbletonOSC
+        host: "127.0.0.1" // the host where AbletonOSC is running
+    });
+}
+
+// Wait for an OSC message on the specified address
+function waitForMessage(address) {
+    return new Promise((resolve) => {
+        osc.on(address, (message) => {
+            resolve(message);
+        });
+    });
+}
+
+// rest of the program...
+```
+
+Now let's redefine our agent to use the new tools.
+
+```javascript
+
 ```
