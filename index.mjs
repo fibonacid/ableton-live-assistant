@@ -5,26 +5,40 @@ import OSC from "osc-js";
 const osc = new OSC({ plugin: new OSC.DatagramPlugin() });
 
 // Listen for OSC messages on the specified port and host
-osc.open({ 
-    port: 11001, // the port used by AbletonOSC
-    host: "0.0.0.0" // accept messages from any host
+osc.open({
+  port: 11001, // the port used by AbletonOSC
+  host: "0.0.0.0", // accept messages from any host
 });
 
 // Send an OSC message to the specified address
 function sendMessage(address, ...args) {
-    osc.send(new OSC.Message(address, ...args), {
-        port: 11000, // the port used by AbletonOSC
-        host: "127.0.0.1" // the host where AbletonOSC is running
-    });
+  return osc.send(new OSC.Message(address, ...args), {
+    port: 11000, // the port used by AbletonOSC
+    host: "127.0.0.1", // the host where AbletonOSC is running
+  });
 }
 
 // Wait for an OSC message on the specified address
 function waitForMessage(address) {
-    return new Promise((resolve) => {
-        osc.on(address, (message) => {
-            resolve(message);
-        });
+  return new Promise((resolve) => {
+    osc.on(address, (message) => {
+      resolve(message);
     });
+  });
+}
+
+async function getTempo() {
+  const address = "/live/song/get/tempo";
+  await sendMessage(address);
+  const message = await waitForMessage(address);
+  return message;
+}
+
+async function setTempo(bmp) {
+  const address = "/live/song/set/tempo";
+  await sendMessage(address, bmp);
+  const message = await waitForMessage(address);
+  return message;
 }
 
 // Load environment variables
@@ -34,52 +48,84 @@ config();
 const openai = new OpenAI(process.env.OPENAI_API_KEY);
 
 async function main() {
-    const messages = [{ role: "user", content: "Hello, what's the time?"}];
+  const messages = [
+    {
+      role: "system",
+      content:
+        "You are a smart Ableton Live controller. You receive commands in natural language and use tools to interact with the Live set.",
+    },
+    { role: "user", content: "Hello, what's the song tempo?" },
+  ];
 
-    // Send a message to the chat model
-    const completion = await openai.chat.completions.create({
-        model: "gpt-4",
-        messages,
-        tools: [{
-            type: "function",
-            function: {
-                name: "get_current_time",
-                description: "Returns the current time",
-            }
-        }]
-    });
-    // Unpack the response and grabs the first tool call
-    const response = completion.choices[0]?.message;
-    const toolCall = response?.tool_calls[0];
+  // Send a message to the chat model
+  const completion = await openai.chat.completions.create({
+    model: "gpt-4",
+    messages,
+    tools: [
+      {
+        type: "function",
+        function: {
+          name: "get_song_tempo",
+          description: "Get the tempo of the current song",
+        },
+      },
+      {
+        type: "function",
+        function: {
+          name: "set_song_tempo",
+          description: "Set the tempo of the current song",
+          parameters: {
+            type: "object",
+            properties: {
+              bpm: {
+                type: "number",
+                description: "The new tempo in beats per minute",
+              },
+            },
+            required: ["bpm"],
+          },
+        },
+      },
+    ],
+  });
+  // Unpack the response and grabs the first tool call
+  const responseMessage = completion.choices[0]?.message;
+  const toolCalls = responseMessage?.tool_calls;
 
-    // Store reply in the messages array
-    messages.push(response);
-    
-    // Check if the tool call is the get_current_time function
-    // This is a simple example, but you could have multiple tools
-    if (toolCall.function.name === "get_current_time") {
-        
-        // Get current time from the operating system
-        const currentTime = new Date().toLocaleTimeString();
-        
-        // Store function call result in the messages array
-        messages.push({ 
-            role: "tool",
-            tool_call_id: toolCall.id,
-            name: toolCall.function.name,
-            content: currentTime
-        });
+  // Check if the response contains a tool call
+  if (toolCalls) {
+    // List available functions
+    const availableFunctions = {
+      get_song_tempo: getTempo,
+      set_song_tempo: setTempo,
+    };
+    // Extend conversation with the tool call
+    messages.push(responseMessage);
+
+    // Iterate over the tool calls and execute the corresponding function
+    for (const toolCall of toolCalls) {
+      const functionName = toolCall.function.name;
+      const functionToCall = availableFunctions[functionName];
+      const functionArgs = JSON.parse(toolCall.function.arguments);
+      const functionResponse = await functionToCall(functionArgs);
+
+      messages.push({
+        tool_call_id: toolCall.id,
+        role: "tool",
+        name: functionName,
+        content: functionResponse.toString(),
+      }); // extend conversation with function response
     }
-    
-    // Send new completion with the updated messages array
+
+    // get a new response from the model where it can see the function response
     const secondResponse = await openai.chat.completions.create({
-        model: "gpt-4",
-        messages,
+      model: "gpt-4",
+      messages: messages,
     });
 
     // Print out the natural language response
     console.log(secondResponse.choices[0].message.content);
+  }
 }
 
 main();
-
