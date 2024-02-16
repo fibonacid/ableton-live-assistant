@@ -79,3 +79,33 @@ If everything is working, you should see your API key printed in the terminal.
 Before going too deep, let's demonstrate basic usage of the OpenAI API.
 We are going to call the api with the question "Hello, how are you" and print the response.
 
+
+```javascript
+import { config } from "dotenv";
+import OpenAI from "openai";
+
+// Load environment variables
+config();
+
+// Create an instance of the OpenAI client
+const openai = new OpenAI(process.env.OPENAI_API_KEY);
+
+async function main() {
+    // Send a message to the chat model
+    const completion = await openai.chat.completions.create({
+        model: "gpt-4",
+        messages: [{ role: "user", content: "Hello, how are you?"}]
+    });
+    // Unpack the response and print it
+    const response = completion.choices[0]?.message?.content;
+    console.log(response);
+}
+
+main();
+```
+
+Run the code and you should see the response printed in the terminal.
+
+```
+As an artificial intelligence, I don't have feelings, but I'm here, ready to assist you. How can I help you today?
+```
