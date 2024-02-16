@@ -207,7 +207,7 @@ osc.open({
 
 // Send an OSC message to the specified address
 function sendMessage(address, ...args) {
-    osc.send(new OSC.Message(address, ...args), {
+    return osc.send(new OSC.Message(address, ...args), {
         port: 11000, // the port used by AbletonOSC
         host: "127.0.0.1" // the host where AbletonOSC is running
     });
@@ -225,8 +225,110 @@ function waitForMessage(address) {
 // rest of the program...
 ```
 
-Now let's redefine our agent to use the new tools.
+Now let's define the functions to get and set the song tempo.
+
+```javascript
+async function getTempo() {
+    const address = "/live/song/get/tempo";
+    await sendMessage(address);
+    const message = await waitForMessage(address);
+    return message;
+}
+
+async function setTempo(bmp) {
+    const address = "/live/song/set/tempo";
+    await sendMessage(address, bmp);
+    const message = await waitForMessage(address);
+    return message;
+}
+```
+
+## Redefining the Agent
+
+Now that we have a method to control Ableton we can extend our agent to use it.
+First, let's add a system prompt to make the agent aware of its responsibilities.
+
+```javascript
+  const messages = [
+    {
+      role: "system",
+      content:
+        "You are a smart Ableton Live controller. You receive commands in natural language and use tools to interact with the Live set.",
+    },
+    { role: "user", content: "Hello, what's the song tempo?" },
+  ];
+```
+
+Then, let's redefine the tools to include the get and set tempo functions.
+
+```javascript
+const tools = [
+      {
+        type: "function",
+        function: {
+          name: "get_song_tempo",
+          description: "Get the tempo of the current song",
+        },
+      },
+      {
+        type: "function",
+        function: {
+          name: "set_song_tempo",
+          description: "Set the tempo of the current song",
+          parameters: {
+            type: "object",
+            properties: {
+              bpm: {
+                type: "number",
+                description: "The new tempo in beats per minute",
+              },
+            },
+            required: ["bpm"],
+          },
+        },
+      },
+    ];
+```
+
+Then, let's modify the code to handle different types of tools calls:
 
 ```javascript
 
+// Unpack the response and grabs the first tool call
+  const responseMessage = completion.choices[0]?.message;
+  const toolCalls = responseMessage?.tool_calls;
+
+  // Check if the response contains a tool call
+  if (toolCalls) {
+    // List available functions
+    const availableFunctions = {
+      get_song_tempo: getTempo,
+      set_song_tempo: setTempo,
+    };
+    // Extend conversation with the tool call
+    messages.push(responseMessage);
+
+    // Iterate over the tool calls and execute the corresponding function
+    for (const toolCall of toolCalls) {
+      const functionName = toolCall.function.name;
+      const functionToCall = availableFunctions[functionName];
+      const functionArgs = JSON.parse(toolCall.function.arguments);
+      const functionResponse = await functionToCall(functionArgs);
+
+      messages.push({
+        tool_call_id: toolCall.id,
+        role: "tool",
+        name: functionName,
+        content: functionResponse.toString(),
+      }); // extend conversation with function response
+    }
+
+    // same as before...
 ```
+
+Now, let's run the code and see if it works.
+
+```bash
+The current song tempo is 120 beats per minute.
+```
+
