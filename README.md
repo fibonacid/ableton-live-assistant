@@ -332,3 +332,8 @@ Now, let's run the code and see if it works.
 The current song tempo is 120 beats per minute.
 ```
 
+## Conclusion
+
+The possibility of fusing the expressivity of natural language with the precision of software is fascinating.
+This post was a bit rushed, but i hope it gave you an idea of how easy it is to create a conversational agent that controls Ableton Live.
+In the future I might get back to this topic and show you how we could expand on this to make the agent a good companion for music production.
